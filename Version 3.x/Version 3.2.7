@@ -1,0 +1,2569 @@
+// The Pet project.cpp : This file contains the 'main' function. Program execution begins and ends there.
+//
+
+/******************************************************************************
+
+Welcome to GDB Online.
+GDB online is an online compiler and debugger tool for C, C++, Python, Java, PHP, Ruby, Perl,
+C#, OCaml, VB, Swift, Pascal, Fortran, Haskell, Objective-C, Assembly, HTML, CSS, JS, SQLite, Prolog.
+Code, Compile, Run and Debug online from anywhere in world.
+10
+***************************************/
+#include <stdio.h>
+#include <string>
+#include <iostream>
+#include <vector>
+#include <format>
+#include <cmath>
+#include <stdexcept>
+#include <map>
+#include <memory>
+#include <optional>
+#include <cstdio>
+#include <algorithm>
+#include <unordered_map>
+#include <chrono>
+/*
+Copyright 2025 u/Mario23038.
+*/
+//clears the screen
+//represents the ditance between Pos objects. provides X dist (Xdiff) Y dist (Ydiff) and a EuclideanDistance
+struct Distances
+{
+	int Xdiff;
+	int Ydiff;
+	double EuclideanDistance;
+};
+// an (X,Y) position
+class Pos
+{
+
+public:
+
+	//Represents a single X,Y Position.
+	Pos(int x, int y)
+	{
+		m_x = x;
+		m_y = y;
+	}
+
+
+	/*
+	Gives the distance between two Pos objects.
+	consisting of an X distance, a Y distance and a euclidean distance with pythagoras theorem
+	*/
+	Distances operator-(const Pos& other) const
+	{
+		int deltaX = m_x - other.m_x;
+		int deltaY = m_y - other.m_y;
+		return Distances{ deltaX, deltaY, sqrt((deltaX * deltaX) + (deltaY * deltaY)) };
+	}
+
+	// Look, I Just think these utility functions were useful. They came from AI. I thought
+	// Why not just use these, they're there, and save me a little effort.
+
+	Pos operator+(const Pos& other) const {
+		return Pos(m_x + other.m_x, m_y + other.m_y);
+	}
+
+	bool operator<(const Pos& other) const {
+		if (m_y != other.m_y)
+		{
+			return m_y < other.m_y;
+		}
+		return m_x < other.m_x;
+	}
+	bool operator==(const Pos& other) const {
+		return (m_x == other.m_x) && (m_y == other.m_y);
+	}
+	//	auto operator <=>(const Pos&) const noexcept = default;
+	friend std::ostream& operator<<(std::ostream& os, const Pos& p) {
+		os << "( X = " << p.m_x << ", Y = " << p.m_y << ")";
+		return os;
+	}
+	//unit conversions
+	static float pixelsToTiles(float pixels)
+	{
+		return pixels / 8;
+	}
+
+	static float tilesToPixels(float tiles)
+	{
+		return tiles * 8;
+	}
+	int m_x;
+	int m_y;
+
+};
+/*
+RGBA color
+Float Red, Blue, Green (0 - 255)
+float alpha (0 - 1)
+*/
+struct color {
+	float Red;
+	float Blue;
+	float Green;
+	float transparency;
+
+};
+/* Pixel
+	inputs: red(int),green(int),blue (int) scrPos(Pos)
+	outputs: none
+	Depends on: Pos()
+	Creates a colour on a screen. To handle transparency, Call the TrueAlpha function.
+	supports full 24-bit colour. 
+	 BG == background
+	*/class Pixel : public Pos
+{
+public:
+	bool _isTransparent;
+	
+
+	Pixel() :Pos(69, -420)
+	{
+		if (!error)
+		{
+			m_BackGroundRed = 255;
+			m_BackGroundGreen = 0;
+			m_BackGroundBlue = 255;
+			error = true;
+		}
+		else
+		{
+			m_BackGroundRed = 0;
+			m_BackGroundGreen = 0;
+			m_BackGroundBlue = 0;
+			error = false;
+		}
+	}
+	Pixel(int red, int green, int blue, Pos scrpos = Pos(0, 0)) :Pos(scrpos.m_x, scrpos.m_y)
+	{
+
+
+		_isTransparent = false;
+		m_BackGroundRed = red;
+		m_BackGroundGreen = green;
+		m_BackGroundBlue = blue;
+
+	}
+
+	//the standard prepSelf algorithm
+	std::string prepSelf() const
+	{
+		// WARNING: This is now slower string creation, but necessary for compatibility.
+		return std::format("\033[48;2;{};{};{}m \033[m", m_BackGroundRed, m_BackGroundGreen, m_BackGroundBlue);
+	}
+	/* returns an instance of a Pixel as a String ready to print. FprepSelf is the Fast prepSelf, shortened to FprepSelf */
+	template<class retVal>
+	retVal FprepSelf(retVal it, Pos pos)
+	{
+		Pos P = pos;
+		constexpr std::string_view formatStr = "\x1b[{};{}H\x1b[0;48;2;{};{};{}m ";
+		return std::format_to(it, formatStr, pos.m_y + 1, pos.m_x + 1, m_BackGroundRed, m_BackGroundGreen, m_BackGroundBlue);
+	}
+
+	int getRed()
+	{
+		return m_BackGroundRed;
+
+	}
+	int getGreen()
+	{
+		return m_BackGroundGreen;
+	}
+	int getBlue()
+	{
+		return m_BackGroundBlue;
+	}
+
+	void setNewRGB(int BGRed, int BGGreen, int BGBlue)
+	{
+		//		m_BackGroundRed = (BGRed % 32) * (255.0/31.0);
+		//		m_BackGroundBlue = (BGBlue % 32) * (255.0/31.0);
+		//		m_BackGroundGreen = (BGGreen % 32) * (255.0/31.0);
+		m_BackGroundRed = BGRed;
+		m_BackGroundBlue = BGBlue;
+		m_BackGroundGreen = BGGreen;
+
+
+	}
+
+	// inputs: other (Pixel), alpha (float)
+	// outputs: color (struct)
+	// depends on: none
+	//Performs proper alpha blending.
+	// the functiuon is based on this formula:
+	// result = (tranparency * foreground) + (1 - transparency) * background
+	//0.0 color A| -----------------------------------| 1.0 colour B
+	color trueAlpha(Pixel other, float alpha)
+	{
+		if (alpha < 0.0 || alpha > 1.0)
+		{	//error
+			alpha = 0.5;
+		}
+		// background
+		float foregroundAR;
+		float foregroundAG;
+		float foregroundAB;
+		float backgroundAR;
+		float backgroundAG;
+		float backgroundAB;
+
+
+		foregroundAR = alpha * m_BackGroundRed;
+		foregroundAG = alpha * m_BackGroundGreen;
+		foregroundAB = alpha * m_BackGroundBlue;
+		backgroundAR = (1 - alpha) * other.getRed();
+		backgroundAG = (1 - alpha) * other.getGreen();
+		backgroundAB = (1 - alpha) * other.getBlue();
+
+
+		float finalAR = foregroundAR + backgroundAR;
+		float finalAG = foregroundAG + backgroundAG;
+		float finalAB = foregroundAB + backgroundAB;
+
+		color result;
+		result.transparency = alpha;
+		result.Red = finalAR;
+		result.Green = finalAG;
+		result.Blue = finalAB;
+		return result;
+
+	}
+private:
+
+	int m_BackGroundRed;
+	int m_BackGroundGreen;
+	int m_BackGroundBlue;
+	static bool error;
+
+
+
+};
+bool Pixel::error = false;
+/*
+Result of a universal color pallette lookup
+result: Either a result or a default
+error: true if not found.
+*/
+struct registrySearch {
+	Pixel result = Pixel(0, 0, 0, Pos(0, 0));
+	bool error = true;
+};
+class UniversalColorPallette
+{
+public:
+	UniversalColorPallette(std::map<int, Pixel> UCPR)
+	{
+		_UCPRegistry = UCPR;
+		nextOpenID = 0;
+		if (!_UCPRegistry.empty()) {
+			auto last_element = _UCPRegistry.rbegin();
+			int max_existing_id = last_element->first;
+			nextOpenID = max_existing_id + 1;
+		}
+
+		// Ensure we never allocate below 0, can't have negative IDs
+		if (nextOpenID < 0) {
+			nextOpenID = 0;
+		}
+		for (auto c: UCPR)
+		{
+			_usageTracker[c.first] = 0;
+			//nextOpenID +=1;
+		}
+	}
+	registrySearch useLookup(int index)
+	{
+		registrySearch output;
+		if (_UCPRegistry.count(index) != 0 && _usageTracker.count(index) != 0)
+		{
+			output.result = _UCPRegistry.at(index);
+			output.error = false;
+			_usageTracker[index]++;
+		}
+		return output;
+	}
+	int addToRegistry(Pixel newEntry)
+	{
+		const int maxSize = 4000;
+		bool willEvict = false;
+		int id = 0;
+		if (_UCPRegistry.size() >= maxSize || _usageTracker.size() >= maxSize || nextOpenID >= maxSize)
+		{
+			willEvict = true;
+		}
+		if (willEvict)
+		{
+			auto it = std::min_element(
+				_usageTracker.begin(),
+				_usageTracker.end(),
+				[](const auto& a, const auto& b)
+				{
+					return a.second < b.second;
+
+				});
+
+			id = it->first;
+			_usageTracker.at(id) = 0;
+			_UCPRegistry.erase(id);
+			_UCPRegistry[id] = newEntry;
+		}
+		else
+		{
+			id = nextOpenID++;
+			_UCPRegistry[id] = newEntry;
+			_usageTracker[id] = 0;
+		}
+
+		return id;
+
+	}
+	std::map<int, Pixel> getRegistry(bool renderTime = true)
+	{
+		if (renderTime)
+		{
+			std::map<int, Pixel> _UCPRCopy;
+			for (auto ID : _UCPRegistry)
+			{
+				_UCPRCopy[ID.first + 8] = ID.second;
+			}
+			return _UCPRCopy;
+		}
+		return _UCPRegistry;
+	}
+
+
+	int searchByRGB(Pixel& p)
+	{
+		for (auto& ID : _UCPRegistry)
+		{
+			if (ID.second.getRed() == p.getRed())
+			{
+				if (ID.second.getGreen() == p.getGreen())
+				{
+					if (ID.second.getBlue() == p.getBlue())
+					{
+						return ID.first;
+
+					}
+				}
+			}
+		}
+		return addToRegistry(p);
+	}
+private:
+	std::map<int, Pixel> _UCPRegistry;
+	std::unordered_map<int, int> _usageTracker;
+	int nextOpenID;
+};
+/*
+an indexable 8x8 collection of Pixels 
+*/
+class Tile
+{
+
+public:
+	//	static std::map<Pos,std::unique_ptr<Tile>> TileRef;
+	bool _collidable;
+	// creates a tile. The supplied coordinates specify the GLOBAL scope coordinates (where in the world a Tile goes)
+	// Tiles are 8x8, if isSprite is true, a Tile is allowed to move, else it is put on the Tile registry, and not allowed to move
+	// (except scrolling)
+	Tile(Pos Gpos, bool isSprite, bool collidable = false)
+	{
+		_globalScopeX = Gpos.m_x;
+		_globalScopeY = Gpos.m_y;
+		_tileData = {};
+		std::vector<Pixel> row = {};
+		for (int y = 0; y < 8; y++)
+		{
+			for (int x = 0; x < 8; x++)
+			{
+				row.push_back(Pixel(0,0, 0, Pos(x + _globalScopeX, y + _globalScopeY)));
+			}
+			_tileData.push_back(row);
+			row = {};
+		}
+		_collidable = collidable;
+		_isSprite = isSprite;
+
+	}
+
+	/*
+	Tiles - An Explanation:
+	A Tile has two sets of coordinates. You will find throughout this codebase:
+	LPos and GPos.
+	GPos - A Tile's position, globally. This defines where in the world a Tile is.
+	LPos - A position IN a tile, Local pos. since a Tile is 8x8 pixels, an LPos is
+	useful to define which pixel in a tile is being specified.
+	Generally, any Global-scope coordinate (world-space) will have a G in it's name,
+	and any Local-scope coordinate (within a Tile) will have an L in it's name.
+	Tiles are divided into two groups:
+	Standard Tiles
+	and Sprite Tiles.
+	*/
+
+	/*
+	Standard Tiles are constructed as such:
+	Tile(Pos, false, collidable)
+
+	Standard Tiles are barred from moving, and are put into a registry, called TileRef.
+	TileRef allows you to search standard Tiles by their global position, using
+	TileRef.at(Pos); or TileRef[Pos];
+
+	Sprite Tiles are constructed as such:
+	Tile(Pos, true, collidable)
+
+	Sprite Tiles are allowed to move, but cannot (and should not) be searched by
+	Global Position with the TileRef as you would a Standard Tile, as Sprite Tiles can move,
+	which risks a keyspace collision, as such, to prevent that, Sprite Tiles are barred from
+	TileRef
+	*/
+	// this sets a pixel in a tile, making sure indexing out of bounds isn't possible
+	void setPixel(Pos Lpos, Pixel newData)
+	{
+		int localScopeX = Lpos.m_x % 8; // making sure indexes out of bounds are impossible
+		int localScopeY = Lpos.m_y % 8;
+		_tileData[localScopeY][localScopeX].setNewRGB(newData.getRed(), newData.getGreen(), newData.getBlue());
+		_tileData[localScopeY][localScopeX]._isTransparent = newData._isTransparent;
+
+	}
+	//retrieves a pixel from a tile, making sure index out of bounds isn't posssible
+	Pixel getPixel(Pos Lpos)
+	{
+		int localX = Lpos.m_x % 8;
+		int localY = Lpos.m_y % 8;
+		return _tileData[localY][localX];
+	}
+
+	// transforms a tile into a bunch of printable pixels. In essence, calling prepSelf on 64 pixels.
+
+	std::vector<std::string> prepTile()
+	{
+		std::vector<std::string> output;
+		std::string tileRow = "";
+		for (int y = 0; y < 8; y++)
+		{
+			for (int x = 0; x < 8; x++)
+			{
+				tileRow += _tileData[y][x].prepSelf();
+			}
+			output.push_back(tileRow);
+			tileRow = "";
+		}
+		return output;
+	}
+	bool getIsSprite()
+	{
+		return _isSprite;
+	}
+	/*
+	inputs: none
+	outputs: none
+	depends on: prepTile
+	Draws a tile directly to the console. Please only use for debugging.
+	*/
+
+	void drawTile()
+	{
+		std::vector<std::string> data = prepTile();
+		for (int i = 0; i < 8; i++)
+		{
+			std::cout << data[i] << std::endl;
+		}
+	}
+	void setNewGlobalPos(Pos Gpos)
+	{
+		if (_isSprite)
+		{
+			_globalScopeX = Gpos.m_x;
+			_globalScopeY = Gpos.m_y;
+			for (int y = 0; y < 8; y++)
+			{
+				for (int x = 0; x < 8; x++)
+				{
+					Pixel& current = _tileData[y][x];
+					current.m_x = _globalScopeX + x;
+					current.m_y = _globalScopeY + y;
+				}
+			}
+		}
+	}
+
+	std::vector<std::vector<Pixel>>& getTileData()
+	{
+		return _tileData;
+	}
+
+	Pos getGlobalPos()
+	{
+		return Pos(_globalScopeX, _globalScopeY);
+	}
+private:
+	std::vector<std::vector<Pixel>> _tileData;
+	int _globalScopeX;
+	int _globalScopeY;
+	bool _isSprite;
+
+
+
+};
+
+//std::map<Pos,std::unique_ptr<Tile>> Screen::TileRef = {};
+// a collection of tiles which can move.
+//make sure that any tiles of a sprite are initialised as sprite tiles.
+class Sprite
+{
+
+public:
+	Sprite() : _Gpos(0, 0)
+	{
+		_tileMap = {};
+
+	}
+
+	virtual void addTile(Tile& tile, int rowIndex)
+	{
+		if (rowIndex >= _tileMap.size())
+		{
+			_tileMap.resize(rowIndex + 1);
+		}
+		if (tile.getIsSprite())
+		{
+			_tileMap[rowIndex].push_back(tile);
+		}
+		else {
+			std::cout << "Hey! Sprite should only have Tiles initialised as Sprite Tiles! Initialised with Tile(Pos,true,collidable);" << std::endl;
+			return;
+		}
+	}
+
+	virtual void editTile(int indX, int indY, Pos pos, Pixel newData)
+	{
+		if (indY >= 0 && indY < _tileMap.size())
+		{
+			if (indX >= 0 && indX < _tileMap[indY].size())
+			{
+				_tileMap[indY][indX].setPixel(pos, newData);
+			}
+		}
+		else {
+			std::cout << "Sprite::editTile() recieved invalid indexes" << std::to_string(indX) << std::to_string(indY) << std::endl;
+			return;
+		}
+	}
+
+	virtual Tile& getTile(int indX, int indY)
+	{
+		static Tile defaultReturn = Tile(Pos(-1, -1), true, false);
+		if (indY >= 0 && indY < _tileMap.size())
+		{
+			if (indX >= 0 && indX < _tileMap[indY].size())
+			{
+				return _tileMap[indY][indX];
+			}
+		}
+		std::cout << "Sprite::getTile() recieved invalid indexes" << std::to_string(indX) << std::to_string(indY) << std::endl;
+		return defaultReturn;
+
+	}
+
+	virtual void replaceTile(int indX, int indY, Tile newTile)
+	{
+		if (indY >= 0 && indY < _tileMap.size())
+		{
+			if (indX >= 0 && indX < _tileMap[indY].size())
+			{
+				_tileMap[indY][indX] = newTile;
+			}
+		}
+		else {
+			std::cout << "Sprite::replaceTile() recieved invalid indexes" << std::to_string(indX) << std::to_string(indY) << std::endl;
+			return;
+		}
+	}
+
+
+	// A way to make sprites move.
+	void updateGlobalPos(Pos Gpos)
+	{
+		_Gpos = Gpos;
+		for (int y = 0; y < _tileMap.size(); y++)
+		{
+			for (int x = 0; x < _tileMap[y].size(); x++)
+			{
+				//This line takes into account offsets, so it can keep a sprite
+				// from falling into it's constituent tiles.
+				_tileMap[y][x].setNewGlobalPos(Pos(Gpos.m_x + Pos::tilesToPixels(x), Gpos.m_y + Pos::tilesToPixels(y)));
+			}
+		}
+	}
+
+	std::vector<std::vector<Tile>> getTileMap()
+	{
+		return _tileMap;
+	}
+	/*
+	input: none
+	output: output (map<Pos,vector<string>)
+	depends on: Tile::getGlobalPos(), Tile::prepTile(), map::at(), vector::size()
+	Returns a bunch of prepared Tiles. FOR DEBUGGING PURPOSES ONLY
+	*/
+	std::map<Pos, std::vector<std::string>> prepSprite()
+	{
+		std::map<Pos, std::vector<std::string>> output;
+		for (int y = 0; y < _tileMap.size(); y++)
+		{
+			for (int x = 0; x < _tileMap[y].size(); x++)
+			{
+				output[_tileMap[y][x].getGlobalPos()] = _tileMap[y][x].prepTile();
+			}
+		}
+		return output;
+	}
+	/*
+	input: graphic (map<Pos,vector<string>>)
+	output: bool
+	depends on: auto, map::first, Pos, vector::push_back, map::at, iostream
+	This function actually draws a Sprite. FOR DEBUGGING PURPOSES ONLY
+	*/
+	void drawSprite(std::map<Pos, std::vector<std::string>> graphic)
+	{
+		/*
+		--SECTION 0--
+		This goes through the given graphic, and finds each unique position, to generate
+		a 2D vector, representing each unique position the Sprite covers. This then feeds
+		into SECTION 1, which will then use that data to go row by row.
+		*/
+		std::vector<std::vector<Pos>> rowGroupings;
+		std::vector<Pos> row;
+		int currentRowNum = 0;
+		//bool changeRowNum = false;
+		for (auto STile : graphic)
+		{
+
+
+
+			if (STile.first.m_y == currentRowNum)
+			{
+
+				row.push_back(STile.first);
+			}
+			else
+			{
+
+				rowGroupings.push_back(row);
+				row = {};
+				currentRowNum = STile.first.m_y;
+				row.push_back(STile.first);
+
+			}
+		}
+		if (!row.empty())
+		{
+			rowGroupings.push_back(row);
+		}
+		/*
+		--SECTION 1--
+		This takes the data generated in SECTION 0, and uses that to hopefully correctly draw a sprite
+		*/
+		std::string output;
+		for (int y = 0; y < rowGroupings.size(); y++)
+		{
+
+			for (int i = 0; i < 8; i++)
+			{
+				output = "";
+				for (int x = 0; x < rowGroupings[y].size(); x++)
+				{
+					output += graphic.at(rowGroupings[y][x])[i];
+				}
+				std::cout << output << '\n';
+
+			}
+		}
+	}
+	Pos getGlobalPos()
+	{
+		return _Gpos;
+	}
+
+protected:
+	std::vector<std::vector<Tile>> _tileMap;
+	Pos _Gpos;
+};
+/*
+The screen class has the following responisibilities:
+-Viewpoert management (setNewScrollOffset())
+-Rendering (compositeSprite(),prepRow(),drawScreen(),resetCompositing())
+Some may argue that this should be two classes. This should be exactly one, due to
+how intrerconnected these duties are.
+*/
+class Screen
+{
+public:
+	/*
+	The TileRef Global Static Tile Registry. Useful for finding Standard Tiles by their Global Position.
+	Give it a Pos, and if a standard tile exists at that location, it returns a std::unique_ptr<Tile> to that Tile.
+	An explanation of the difference between a Standard Tile and a Sprite Tile can be found between Tile::Tile() and Tile::setPixel().
+	See the comments between Tile::Tile() and Tile::setPixel() for instructions on how to initialise a Standard Tile and a Sprite Tile.
+	*/
+	static std::map<Pos, std::unique_ptr<Tile>> TileRef;
+	//remeber: originl res: 32W, 28H
+	static const int tilesW = 50;
+	static const int tilesH = 30;
+	static const int tileSize = 8;
+
+	Screen()
+	{
+		std::vector<Tile> row = {};
+		for (int y = 0; y < tilesH; y++)
+		{
+			row = {};
+			for (int x = 0; x < tilesW; x++)
+			{
+				//row.push_back(Tile(Pos(x*tileSize, y*tileSize),false,false);
+				Tile T = Tile(Pos(x * tileSize, y * tileSize), false, false);
+				Screen::TileRef[Pos(x * tileSize, y * tileSize)] = std::make_unique<Tile>(T);
+				row.push_back(T);
+
+
+			}
+			_tiles.push_back(row);
+		}
+		_PX = 0;
+		_PY = 0;
+		_TX = 0;
+		_TY = 0;
+		_allowScrolling = false;
+	}
+
+	void setTile(Pos tilePos, Tile newTile)
+	{
+		int x;
+		int y;
+		if (!_allowScrolling)
+		{
+			x = tilePos.m_x % tilesW;
+			y = tilePos.m_y % tilesH;
+		}
+		else {
+			y = tilePos.m_y % _tiles.size();
+			x = tilePos.m_x % _tiles[y].size();
+		}
+		_tiles[y][x] = newTile;
+		TileRef[Pos(x * 8, y * 8)] = std::make_unique<Tile>(newTile);
+	}
+
+	Tile& getTile(Pos posInTiles)
+	{
+		int x;
+		int y;
+		if (!_allowScrolling)
+		{
+			x = (posInTiles.m_x % tilesW);
+			y = (posInTiles.m_y % tilesH);
+		}
+		else {
+			y = (posInTiles.m_y % _tiles.size());
+			x = (posInTiles.m_x % _tiles[y].size());
+		}
+		return _tiles[y][x];
+	}
+	/*
+	How to calculate pixelOffset and tileOffset:
+	You have a Pos(X,Y)
+	TileOffset = Pos(X - (X % 8), Y - (Y % 8));
+	PixelOffset = Pos((X % 8),(Y % 8))
+	I Reccommend you start with (0,0)
+	*/
+	void setNewScrollOffset(Pos pixelOffset, Pos tileOffset)
+	{
+		int PX = pixelOffset.m_x;
+		int PY = pixelOffset.m_y;
+		int TX = tileOffset.m_x;
+		int TY = tileOffset.m_y;
+		//PX and PY must stay in the bounds of a tile
+		_PX += PX;
+		_PY += PY;
+		_TX += floor(PX / 8);
+		_TY += floor(PY / 8);
+		_PX = ((PX % 8) + 8) % 8;
+		_PY = ((PY % 8) + 8) % 8;
+		_allowScrolling = true;
+	}
+	void stopCamera()
+	{
+		_allowScrolling = false;
+	}
+	/*
+	applyDiff
+	inputs: newScrollOffset (Pos)
+	outputs: bool
+	depends on: Pos, getPixel, prepSelf, 
+	
+	
+	 Applies a difference, used to render stuff after the first frame.
+	USE INSTEAD OF DRAWSCREEN!
+	Note: Please, Do not use offsets outside of -1 to 1. This function ignores magnitude.
+	Note: CALL BEFORE compositeSprite()
+	*/
+	bool applyDiff(Pos newScrollOffset)
+	{
+		if (!_allowScrolling)
+		{
+			return true;
+		}
+		Pos currentScrollOffset = Pos(_TX, _TY);
+		Pos newScrollOffsetTiles = Pos(newScrollOffset.m_x - (newScrollOffset.m_x % 8), newScrollOffset.m_y - (newScrollOffset.m_y % 8));
+		Distances diff = currentScrollOffset - newScrollOffsetTiles;
+		if (diff.Xdiff == 0 && diff.Ydiff == 0)
+		{
+			return true;
+		}
+		int leading = 0;
+		int trailing = 0;
+		bool vertical = false;
+		if (diff.Xdiff > 0)
+		{ // right
+			leading = (tilesH * tileSize) - 1;
+			trailing = 0;
+			vertical = false;
+		}
+		if (diff.Xdiff < 0)
+		{// left
+			leading = 0;
+			trailing = (tilesH * tileSize) - 1;
+			vertical = false;
+		}
+		if (diff.Ydiff > 0)
+		{// up
+			leading = (tilesW * tileSize) - 1;
+			trailing = 0;
+			vertical = true;
+		}
+		if (diff.Ydiff < 0)
+		{ // down
+			leading = 0;
+			trailing = (tilesW * tileSize) - 1;
+			vertical = true;
+		}
+		if(vertical)
+		{
+			for (int y = 0; y < tilesW * tileSize; y++)
+			{
+				 Tile& currentTile =_tiles[y][leading - (leading % 8)];
+				 Pixel currentPixel = currentTile.getPixel(Pos(y,leading % 8));
+				 std::cout << "\x1b[" << leading + 1 << ";" << y + 1 << "H" << currentPixel.prepSelf();
+				 currentTile = _tiles[y][trailing - (trailing % 8)];
+				 currentPixel = currentTile.getPixel(Pos(y, trailing % 8));
+				 std::cout << "\x1b[" << trailing + 1 << ";" << y + 1 << "H\x1b[K";
+			}
+		}
+		else 
+		{
+			for (int x = 0; x < tilesH * tileSize; x++)
+			{
+				Tile& currentTile =_tiles[leading - (leading % 8)][Pos::tilesToPixels(x)];
+				Pixel currentPixel = currentTile.getPixel(Pos(leading % 8,x));
+				std::cout << "\x1b[" << x+ 1 << ";" << leading + 1 << "H" << currentPixel.prepSelf();
+				currentTile = *TileRef.at(Pos(trailing - (trailing % 8),Pos::tilesToPixels(x)));
+				currentPixel = currentTile.getPixel(Pos(trailing % 8, x));
+				std::cout << "\x1b[" << x + 1 << ";" << trailing + 1 << "H\x1b[K";
+			}
+		}
+		_TX = (_TX + newScrollOffset.m_x) - ((_TX + newScrollOffset.m_x) % 8);
+		_TY = (_TY + newScrollOffset.m_y) - ((_TY + newScrollOffset.m_y) % 8);
+		_PX = abs((_PX + newScrollOffset.m_x)) % 8;
+		_PY = abs((_PY + newScrollOffset.m_x)) % 8;
+		return false;
+	}
+	
+	/*
+	This prepares one row of Pixels to be drawn. [DEPRECATED! DO NOT CALL]
+	*/
+	std::string::iterator prepRow(int TrowG, int TrowL, std::string::iterator bufferIt)
+	{
+		//	std::string output = "";
+		int Scy = (TrowG * 8) + TrowL - _PY;
+		for (int i = 0; i < tilesW; i++)
+		{
+			int TileXind = (i + _TX) % tilesW;
+			int TileYind = (TrowG + _TY) % tilesH;
+			Tile& currentTile = _tiles[TileYind][TileXind];
+			for (int j = 0; j < 8; j++)
+			{
+				int Scx = (i * 8) + j - _PX;
+				Pixel currentPixel = currentTile.getPixel(Pos(j, TrowL));
+				if (Scx >= 0 && Scx < (tilesW * tileSize) && Scy >= 0 && Scy < (tilesH * tileSize))
+				{
+					bufferIt = currentPixel.FprepSelf(bufferIt, Pos(Scx, Scy));
+				}
+			}
+		}
+		//	output += '\n';
+		return bufferIt;
+	}
+	/*
+	This takes the given sprite, and uses it's global position to correctly
+	composite it, so that it can be viewed.
+	*/
+	void compositeSprite(Sprite& sprite)
+	{
+		const std::vector<std::vector<Tile>>& STileMap = sprite.getTileMap();
+		float PNG = 1.0;
+		std::ostringstream currentRow;
+		for (int y = 0; y < STileMap.size(); y++)
+		{
+			for (int x = 0; x < STileMap[y].size(); x++)
+			{
+				Tile currentSpriteTile = STileMap[y][x];
+				Pos currentGPos = currentSpriteTile.getGlobalPos();
+				Pos scPos = Pos(currentGPos.m_x / tileSize, currentGPos.m_y / tileSize);
+				Tile& currentBGTile = getTile(scPos);
+				_compositedTiles.push_back(currentBGTile);
+				for (int PY = 0; PY < 8; ++PY)
+				{
+					for (int PX = 0; PX < 8; ++PX)
+					{
+						Pos currentPos = Pos(PX, PY);
+						Pixel currentSpritePixel = currentSpriteTile.getPixel(currentPos);
+						if (currentSpritePixel._isTransparent)
+						{
+							PNG = 0.0;
+						}
+						else
+						{
+							PNG = 1.0;
+						}
+						color compositedColor = currentSpritePixel.trueAlpha(currentBGTile.getPixel(currentPos), PNG);
+						Pixel compositedPixel = Pixel(compositedColor.Red, compositedColor.Green, compositedColor.Blue, Pos(0, 0));
+						currentBGTile.setPixel(currentPos, compositedPixel);
+						currentRow << "\x1b[" << (currentGPos.m_y + PY + 1) << ';' << (currentGPos.m_x+ PX + 1) << 'H' << compositedPixel.prepSelf();
+					}
+				}
+				//setTile(currentBGTile.getGlobalPos(),currentBGTile);// actually applies the compositing
+			}
+		}
+		std::cout << currentRow.str();
+	}
+	/*
+	This resets the compositing process of compositeSprite.
+	RECCOMENDED ORDER OF OPERATIONS:
+	0) Game logic <- you can customise this.
+	(Please use setNewScrollOffset before your game logic exits if you need to)
+	1) applyDiff()
+	2) compositeSprite()
+	3) resetCompositing()
+	*/
+	void resetCompositing()
+	{
+		for (int i = 0; i < _compositedTiles.size(); i++)
+		{
+			//Screen::TileRef[_compositedTiles[i].getGlobalPos()] = std::make_unique<Tile>(_compositedTiles[i]);
+			Tile compositedTile = _compositedTiles[i];
+			Tile* liveTilePtr = Screen::TileRef.at(_compositedTiles[i].getGlobalPos()).get();
+			*liveTilePtr = compositedTile;
+			setTile(_compositedTiles[i].getGlobalPos(), compositedTile);
+
+		}
+		_compositedTiles = {};
+	}
+	/*
+	/!\ This is where a lot of the memory gets eaten up in screen, and why I reccomended only one instance of Screen /!\
+	LEGACY METHOD! DO NOT CALL!
+	*/
+	void drawScreen()
+	{
+		/*
+		At the time of typing, (Nov 2025) this is the most information I think I've ever stored in a single variable.
+		Let's do a little math. _tiles is bound to hold ~1.15MB+. That is the number to beat.
+		1 pixel holds 12 Bytes of state information.
+		A tile is 64 pixels, makng 768 bytes per tile.
+		50* 30 = 1500 (screen resolution)
+		768 bytes per tile * 1500 Tiles = 1152000 Bytes (~1.15MB)
+		However, this calculation is different when we want to PRINT stuff
+		up in Pixel::prepSelf(), you will find an ANSI format string, measuring in (Maximum, after formatting) at 29 characters. or 24 Bytes.
+		29 Bytes * 64 =1586  Bytes ( formerly 2368 )
+		1586 bytes per tile * 1500 tiles = 2379000 bytes (2.38 MB)(formerly 3552000 bytes, (3.55MB))
+		3.55MB > 1.15MB thus, this variable holds the record for the most information stored in a single variable, hence the name ohLawdHeComin
+		*/
+
+		const size_t totalPixels = static_cast<size_t>(tilesW * tileSize) * (tilesH * tileSize);
+		const size_t charPerPixel = 40; // the 29 characters of the original string being concatenated 96000 times, plus headroom
+		const size_t totalSize = totalPixels * charPerPixel;
+		std::string ohLawdHeComin = "";
+		ohLawdHeComin.resize(totalSize);
+		std::string::iterator currentIt = ohLawdHeComin.begin();
+		for (int i = 0; i < tilesH; i++)
+		{
+			for (int j = 0; j < tileSize; j++)
+			{
+				currentIt = prepRow(i, j, currentIt);
+			}
+		}
+		ohLawdHeComin.resize(std::distance(ohLawdHeComin.begin(), currentIt));
+
+		fwrite(ohLawdHeComin.c_str(), 1, ohLawdHeComin.length(), stdout);
+		fflush(stdout);
+	}
+
+private:
+	std::vector<std::vector<Tile>> _tiles;
+	std::vector<Tile> _compositedTiles;
+	int _PX;
+	int _PY;
+	int _TX;
+	int _TY;
+	bool _allowScrolling;
+
+};
+std::map<Pos, std::unique_ptr<Tile>> Screen::TileRef = {};
+
+// this gives a sprite with ANIMATION!
+class IndexedSprite : public Sprite
+{
+public:
+	IndexedSprite() :Sprite()
+	{
+		_currentFrame = {};
+	}
+	std::vector<Pos> getCurrentFrame()
+	{
+		return _currentFrame;
+	}
+
+	void setCurrentFrame(std::vector<Pos> newFrame)
+	{
+		_currentFrame = newFrame;
+	}
+
+	void  addTile(Tile& tile, int rowIndex) override
+	{
+		if (rowIndex >= _allFrames.size())
+		{
+			_allFrames.resize(rowIndex + 1);
+		}
+		if (tile.getIsSprite())
+		{
+			_allFrames[rowIndex].push_back(tile);
+		}
+		else {
+			std::cout << "Error: IndexedSprite should only have Tiles initialised as Sprite Tiles!" << std::endl;
+			return;
+		}
+	}
+
+	void editTile(int indX, int indY, Pos pos, Pixel newData) override
+	{
+		if (indY >= 0 && indY < _allFrames.size())
+		{
+			if (indX >= 0 && indX < _allFrames[indY].size())
+			{
+				_allFrames[indY][indX].setPixel(pos, newData);
+			}
+		}
+	}
+
+	void replaceTile(int indX, int indY, Tile newTile) override
+	{
+		if (indY >= 0 && indY < _allFrames.size())
+		{
+			if (indX >= 0 && indX < _allFrames[indY].size())
+			{
+				_allFrames[indY][indX] = newTile;
+			}
+		}
+		else
+		{
+			std::cout << "IndexedSprite::replaceTile() recieved invalid indexes" << std::to_string(indX) << std::to_string(indY) << std::endl;
+			return;
+		}
+	}
+
+	Tile& getTile(int indX, int indY) override
+	{
+		static Tile defaultReturn = Tile(Pos(-1, -1), true, false);
+		if (indY >= 0 && indY < _allFrames.size())
+		{
+			if (indX >= 0 && indX < _allFrames[indY].size())
+			{
+				return _allFrames[indY][indX];
+			}
+		}
+		else
+		{
+			std::cout << "IndexedSprite::getTile() recieved invalid indexes" << std::to_string(indX) << std::to_string(indY) << std::endl;
+			return defaultReturn;
+		}
+	}
+	// this allows you to change frames
+	void setupFrame()
+	{
+		for (int i = 0; i < _currentFrame.size(); i++)
+		{
+			if (_currentFrame[i].m_y >= _allFrames.size() || _currentFrame[i].m_x >= _allFrames[_currentFrame[i].m_y].size())
+			{
+				std::cout << "IndexedSprite::setupFrame() experienced an error" << std::endl;
+				return;
+			}
+			Sprite::replaceTile(
+				_currentFrame[i].m_x,
+				_currentFrame[i].m_y,
+				_allFrames[_currentFrame[i].m_y][_currentFrame[i].m_x]
+			);
+		}
+
+	}
+
+protected:
+	/*
+	_currentFrame
+	Contains a collection of Pos Objects.These Pos objects are used as 2D indices into
+	the _tileMap inherited from Sprite. This is so that the current values in the
+	_currentFrame represent the CURRENT index of an IndexedSprite. Keep in mind that,
+	in indexedSprite, a Pos object is in TILES. Should you need to convert to pixels, call Pixel::tilesToPixels();
+	*/
+	std::vector<Pos> _currentFrame;
+	std::vector<std::vector<Tile>> _allFrames;
+};
+
+//finally, an entity.
+class Entity : public IndexedSprite
+{
+public:
+
+	Entity(int HP)
+	{
+		_hitPoints = HP;
+	}
+
+	void setHP(int newHP)
+	{
+		if (newHP >= 0)
+		{
+			_hitPoints = newHP;
+		}
+	}
+	int getHP()
+	{
+		return _hitPoints;
+	}
+
+	void setCollision(bool newState)
+	{
+		_hasCollision = newState;
+	}
+	/*
+	The more advanced, but slow way to check collision, Best used for interactions between Entity objects.
+	because this method does not rely on the Tile Registry.
+	*/
+	bool collisionCheck(Tile other)
+	{
+		Pos tilePos = other.getGlobalPos();
+		std::vector<Distances> tileDists; // contains a list of all the Distances stuct instances 
+		for (int y = 0; y < _tileMap.size(); y++)
+		{
+			for (int x = 0; x < _tileMap[y].size(); x++)
+			{
+				tileDists.push_back(tilePos - _tileMap[y][x].getGlobalPos()); // calculates a Distances struct
+			}
+		}
+		std::vector<double> euclids;
+		for (int i = 0; i < tileDists.size(); i++)//extracts the euclidean distance
+		{
+			euclids.push_back(tileDists[i].EuclideanDistance);
+		}
+		/*
+		This check will extract the shortest Euclidean distance from the list of euclidean distances calculated earlier.
+		Should there be a distance of less than 1, that signals a collision.
+		Because Pos objects are an integer coordinates, and Pixels inherit from Pos, this calculates distances in Pixels.
+		Thus, a Euclidean distance of less than 1 indicates that the two objects are less than 1 pixel apart, and are thus colliding
+		*/
+		if (!euclids.empty() && *min_element(euclids.begin(), euclids.end()) < 1)
+		{
+			return true;
+		}
+		return false;
+	}
+
+	void addAnimation(std::vector<std::vector<Pos>>& AF)
+	{
+		_animFrames.push_back(AF);
+	}
+
+	void editAnimation(int index, std::vector<std::vector<Pos>> stuff)
+	{
+		if (index > -1 && index < _animFrames.size())
+		{
+			_animFrames[index] = stuff;
+		}
+	}
+
+	void setCurrentAnimIndex(int newInd)
+	{
+		_currentAnimIndex = newInd;
+	}
+
+	void advanceOneFrame()
+	{
+
+
+		_frame = ((++_frame) % _animFrames[_currentAnimIndex].size()); //+ startOffset;
+	}
+
+	void applyFrame()
+	{
+		_currentFrame = _animFrames[_currentAnimIndex][_frame];
+	}
+	/*
+	A simper, faster method of checking collision.
+	inputs: gravVector (Pos), tileIndex(std::map<Pos,Tile>)
+	outputs: Pos.
+	depends on: std::map
+	*/
+	Pos calculatePhysics(Pos gravVector, std::map<Pos, std::unique_ptr<Tile>> tileIndex)
+	{
+		Pos newGPos = _Gpos + gravVector;
+		if (tileIndex.count(newGPos) != 0)
+		{
+			if (tileIndex.at(newGPos)->_collidable)
+			{
+				return _Gpos;
+			}
+		}
+		return newGPos;
+	}
+private:
+
+	int _hitPoints;
+	bool _hasCollision = true;
+	std::vector<std::vector<std::vector<Pos>>> _animFrames;
+	int _currentAnimIndex;
+	int _frame;
+
+
+};
+void clearFrame()
+{
+	std::cout << "\x1b[2J\x1b[?25l\x1b[H";
+}
+
+void systemsCheck()
+{
+	std::shared_ptr<Tile> test = std::make_shared<Tile>(Pos(0, 0), false, false);
+	//We're going to attempt to check the tile system works.
+	/*
+	   {{0,1,2},{3,4,5},{6,7,8},{9,10,11},{12,13,14},{15,16,17},{18,19,20},{21,22,23}},
+		{{25,26,27},{28,29,30},{31,0,1},{2,3,4},{5,6,7},{8,9,10},{11,12,13},{14,15,16}},
+		{{17,18,19},{20,21,22},{23,24,25},{26,27,28},{29,30,31},{0,1,2},{3,4,5},{6,7,8}},
+		{{9,10,11},{12,13,14},{15,16,17},{18,19,20},{21,22,23},{24,25,26},{27,28,29},{30,31,0}},
+		{{1,2,3},{4,5,6},{7,8,9},{10,11,12},{13,14,15},{16,17,18},{19,20,21},{22,23,24}},
+		{{25,26,27},{28,29,30},{31,0,1},{2,3,4},{5,6,7},{8,9,10},{11,12,13},{14,15,16}},
+		{{17,18,19},{20,21,22},{23,24,25},{26,27,28},{29,30,31},{0,1,2},{3,4,5},{6,7,8}},
+		{{9,10,11},{12,13,14},{15,16,17},{18,19,20},{21,22,23},{24,25,26},{27,28,29},{30,31,0}}
+	*/
+	const std::vector<std::vector<std::vector<int>>> testGraphic = {
+		{{0,0,0}, {31,31,31}, {0,0,0}, {31,31,31}, {0,0,0}, {31,31,31}, {0,0,0}, {31,31,31}},
+		// Row 1
+		{{31,31,31}, {0,0,0}, {31,31,31}, {0,0,0}, {31,31,31}, {0,0,0}, {31,31,31}, {0,0,0}},
+		// Row 2
+		{{0,0,0}, {31,31,31}, {0,0,0}, {31,31,31}, {0,0,0}, {31,31,31}, {0,0,0}, {31,31,31}},
+		// Row 3
+		{{31,31,31}, {0,0,0}, {31,31,31}, {0,0,0}, {31,31,31}, {0,0,0}, {31,31,31}, {0,0,0}},
+		// Row 4
+		{{0,0,0}, {31,31,31}, {0,0,0}, {31,31,31}, {0,0,0}, {31,31,31}, {0,0,0}, {31,31,31}},
+		// Row 5
+		{{31,31,31}, {0,0,0}, {31,31,31}, {0,0,0}, {31,31,31}, {0,0,0}, {31,31,31}, {0,0,0}},
+		// Row 6
+		{{0,0,0}, {31,31,31}, {0,0,0}, {31,31,31}, {0,0,0}, {31,31,31}, {0,0,0}, {31,31,31}},
+		// Row 7
+		{{31,31,31}, {0,0,0}, {31,31,31}, {0,0,0}, {31,31,31}, {0,0,0}, {31,31,31}, {0,0,0}}
+
+	};
+	Pos currentPixel = Pos(0, 0);
+	Pixel defaultPixel = Pixel(0, 0, 0, Pos(0, 0));
+	for (int y = 0; y < 8; y++)
+	{
+		for (int x = 0; x < 8; x++)
+		{
+			currentPixel.m_x = x;
+			currentPixel.m_y = y;
+			defaultPixel.setNewRGB(testGraphic[y][x][0], testGraphic[y][x][1], testGraphic[y][x][2]);
+			test->setPixel(currentPixel, defaultPixel);
+
+		}
+	}
+	std::cout << "Test 0: Tile Composition and rendering" << std::endl;
+	test->drawTile();
+	std::cout << "Test 0 verdict: Pass" << std::endl;
+	std::cout << "Test 1: AlphaIndex. Verdict: Pass*" << std::endl;
+	Pixel TestRed = Pixel(31, 0, 0, Pos(0, 0));
+	Pixel TestGreen = Pixel(0, 0, 31, Pos(0, 0));
+	Pixel TestOutput = Pixel(0, 0, 0, Pos(0, 0));
+	color TC = TestRed.trueAlpha(TestGreen, 0.5);
+	TestOutput.setNewRGB(TC.Red, TC.Green, TC.Blue);
+	//	std::cout<<TestRed.prepSelf(Pos(0,0))<<"+"<<TestGreen.prepSelf(Pos(0,0))<<"=="<<TestOutput.prepSelf(Pos(0,0))<<std::endl;
+	std::cout << "Test 2: TrueAlpha blending: Tested earlier. Result: pass" << std::endl;
+	std::cout << "Test 3: Sprite rendering" << std::endl;
+	Sprite testSprite;
+	testSprite.addTile(*test, 0);
+	std::map<Pos, std::vector<std::string>> thing = testSprite.prepSprite();
+	for (auto pair : thing)
+	{
+		std::vector<std::string>& Slines = pair.second;
+		for (std::string& line : Slines)
+		{
+			std::cout << line << std::endl;
+		}
+	}
+	std::cout << "Pass! Minimum Viable product Achieved!" << std::endl;
+	//printf("Hello World");
+}
+
+Tile drawText(Tile& blankTile, std::vector<std::vector<int>> instr, Pixel textColor)
+{
+	if (instr.size() < 9) // a tile is 8x8 pixels. 8*8 = 64.
+	{
+		for (int i = 0; i < instr.size(); i++)
+		{
+			for (int j = 0; j < instr[i].size(); j++)
+			{
+				if (instr[i][j] == 1)
+				{
+					blankTile.setPixel(Pos(j, i), textColor);
+				}
+			}
+		}
+	}
+	return blankTile;
+}
+// returns a tile graphic for text. Useful for most basic sentences. Expand as needed. 
+std::vector<std::vector<int>> charLookup(char input)
+{
+	std::vector<std::vector<int>> output;
+	switch (input)
+	{
+	case '0':
+		output = {
+			{0,1,1,1,1,1,1,0},
+			{1,1,1,1,1,1,1,1},
+			{1,1,1,0,0,0,1,1},
+			{1,1,0,1,0,0,1,1},
+			{1,1,0,0,1,0,1,1},
+			{1,1,0,0,0,1,1,1},
+			{1,1,1,1,1,1,1,1},
+			{0,1,1,1,1,1,1,0}
+		};
+		break;
+	case '1':
+		output = {
+			{0,0,0,0,0,0,0,1},
+			{0,0,0,0,0,0,1,1},
+			{0,0,0,0,0,1,0,1},
+			{0,0,0,0,0,0,0,1},
+			{0,0,0,0,0,0,0,1},
+			{0,0,0,0,0,0,0,1},
+			{0,0,0,0,0,0,0,1},
+			{0,0,0,0,0,0,0,1},
+		};
+		break;
+	case '2':
+		output = {
+			{0,0,1,1,1,1,0,0},
+			{0,1,0,0,0,0,1,0},
+			{0,1,0,0,0,0,1,0},
+			{0,0,0,0,0,1,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,1,0,0,0,0,0},
+			{0,1,0,0,0,0,0,0},
+			{0,1,1,1,1,1,1,0}
+		};
+		break;
+	case '3':
+		output = {
+			{0,0,1,1,1,1,0,0},
+			{0,1,0,0,0,0,1,0},
+			{0,0,0,0,0,0,1,0},
+			{0,0,0,0,0,0,1,0},
+			{0,0,0,1,1,1,0,0},
+			{0,0,0,0,0,0,1,0},
+			{0,1,0,0,0,0,1,0},
+			{0,0,1,1,1,1,0,0}
+		};
+		break;
+	case '4':
+		output = {
+			{0,0,0,0,0,1,0,0},
+			{0,0,0,0,1,1,0,0},
+			{0,0,0,1,0,1,0,0},
+			{0,0,1,0,0,1,0,0},
+			{0,1,1,1,1,1,1,0},
+			{0,0,0,0,0,1,0,0},
+			{0,0,0,0,0,1,0,0},
+			{0,0,0,0,0,1,0,0},
+		};
+		break;
+	case '5':
+		output = {
+			{0,1,1,1,1,1,1,0},
+			{0,1,0,0,0,0,0,0},
+			{0,1,0,1,1,1,0,0},
+			{0,1,1,0,0,0,1,0},
+			{0,0,0,0,0,0,1,0},
+			{0,0,0,0,0,0,1,0},
+			{0,1,0,0,0,1,0,0},
+			{0,0,1,1,1,0,0,0},
+		};
+		break;
+	case '6':
+		output = {
+			{0,0,1,1,1,1,0,0},
+			{0,1,0,0,0,0,0,0},
+			{0,1,0,0,0,0,0,0},
+			{0,1,1,1,1,0,0,0},
+			{0,1,0,0,0,1,0,0},
+			{0,1,0,0,0,1,0,0},
+			{0,1,0,0,0,1,0,0},
+			{0,0,1,1,1,0,0,0},
+		};
+		break;
+	case '7':
+		output = {
+			{0,1,1,1,1,1,1,0},
+			{0,0,0,0,0,0,1,0},
+			{0,0,0,0,0,1,0,0},
+			{0,0,0,0,1,0,0,0},
+			{0,0,0,1,0,0,0,0},
+			{0,0,0,1,0,0,0,0},
+			{0,0,0,1,0,0,0,0},
+			{0,0,0,1,0,0,0,0},
+		};
+		break;
+	case '8':
+		output = {
+			{0,0,1,1,1,1,0,0},
+			{0,1,0,0,0,0,1,0},
+			{0,1,0,0,0,0,1,0},
+			{0,0,1,1,1,1,0,0},
+			{0,1,0,0,0,0,1,0},
+			{0,1,0,0,0,0,1,0},
+			{0,1,0,0,0,0,1,0},
+			{0,0,1,1,1,1,0,0},
+		};
+		break;
+	case '9':
+		output = {
+			{0,0,1,1,1,1,0,0},
+			{0,1,0,0,0,0,1,0},
+			{0,1,0,0,0,0,1,0},
+			{0,0,1,1,1,1,1,0},
+			{0,0,0,0,0,0,1,0},
+			{0,0,0,0,0,0,1,0},
+			{0,0,0,0,0,0,1,0},
+			{0,0,1,1,1,1,0,0},
+		};
+		break;
+	case 'A':
+		output = {
+			{0,0,0,1,1,0,0,0},
+			{0,1,1,0,0,1,1,0},
+			{1,1,0,0,0,0,1,1},
+			{1,1,1,1,1,1,1,1},
+			{1,1,1,1,1,1,1,1},
+			{1,1,0,0,0,0,1,1},
+			{1,1,0,0,0,0,1,1},
+			{1,1,0,0,0,0,1,1},
+		};
+		break;
+	case 'B':
+		output = {
+			{1,1,1,1,1,1,0,0},
+			{1,1,0,0,0,0,1,0},
+			{1,1,0,0,0,0,1,0},
+			{1,1,0,0,0,0,1,0},
+			{1,1,1,1,1,1,0,0},
+			{1,1,0,0,0,0,1,0},
+			{1,1,0,0,0,0,1,0},
+			{1,1,1,1,1,1,0,0},
+		};
+		break;
+	case 'C':
+		output = {
+			{0,0,1,1,1,1,0,0},
+			{0,1,1,1,1,1,0,0},
+			{1,1,0,0,0,0,1,0},
+			{1,1,0,0,0,0,0,0},
+			{1,1,0,0,0,0,0,0},
+			{1,1,0,0,0,0,1,0},
+			{0,1,1,1,1,1,0,0},
+			{0,0,1,1,1,1,0,0},
+		};
+		break;
+	case 'D':
+		output = {
+			{1,1,1,1,1,1,0,0},
+			{1,1,1,1,1,1,1,0},
+			{1,1,0,0,0,0,1,1},
+			{1,1,0,0,0,0,1,1},
+			{1,1,0,0,0,0,1,1},
+			{1,1,0,0,0,0,1,1},
+			{1,1,1,1,1,1,1,0},
+			{1,1,1,1,1,1,0,0},
+		};
+		break;
+	case 'E':
+		output = {
+			{1,1,1,1,1,1,1,1},
+			{1,1,1,1,1,1,1,1},
+			{1,1,0,0,0,0,0,0},
+			{1,1,1,1,0,0,0,0},
+			{1,1,1,1,0,0,0,0},
+			{1,1,0,0,0,0,0,0},
+			{1,1,1,1,1,1,1,1},
+			{1,1,1,1,1,1,1,1},
+		};
+		break;
+	case 'F':
+		output = {
+			{1,1,1,1,1,1,1,1},
+			{1,1,1,1,1,1,1,1},
+			{1,1,0,0,0,0,0,0},
+			{1,1,1,1,0,0,0,0},
+			{1,1,1,1,0,0,0,0},
+			{1,1,0,0,0,0,0,0},
+			{1,1,0,0,0,0,0,0},
+			{1,1,0,0,0,0,0,0},
+		};
+		break;
+	case 'G':
+		output = {
+			{0,1,1,1,1,1,0,0},
+			{1,1,1,1,1,1,0,0},
+			{1,1,0,0,0,0,0,0},
+			{1,1,0,1,1,1,1,0},
+			{1,1,0,1,1,1,1,0},
+			{1,1,0,0,0,0,1,1},
+			{1,1,1,1,1,1,1,1},
+			{0,1,1,1,1,1,1,0}
+		};
+		break;
+	case 'H':
+		output = {
+			{1,1,0,0,0,0,1,1},
+			{1,1,0,0,0,0,1,1},
+			{1,1,0,0,0,0,1,1},
+			{1,1,1,1,1,1,1,1},
+			{1,1,1,1,1,1,1,1},
+			{1,1,0,0,0,0,1,1},
+			{1,1,0,0,0,0,1,1},
+			{1,1,0,0,0,0,1,1},
+		};
+		break;
+	case 'I':
+		output = {
+			{0,1,1,1,1,1,1,0},
+			{0,1,1,1,1,1,1,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,1,1,1,1,1,1,0},
+			{0,1,1,1,1,1,1,0}
+		};
+		break;
+	case 'J':
+		output = {
+			{0,0,1,1,1,1,0,0},
+			{0,0,1,1,1,1,1,0},
+			{0,0,0,0,0,1,1,0},
+			{0,0,0,0,0,1,1,0},
+			{0,0,0,0,0,1,1,0},
+			{0,1,0,0,0,1,1,0},
+			{0,1,1,1,1,1,1,0},
+			{0,0,1,1,1,1,0,0}
+		};
+		break;
+	case 'K':
+		output = {
+			{1,1,0,0,0,1,1,0},
+			{1,1,0,0,1,1,1,0},
+			{1,1,0,1,1,1,0,0},
+			{1,1,1,1,1,0,0,0},
+			{1,1,1,1,1,0,0,0},
+			{1,1,0,1,1,1,0,0},
+			{1,1,0,0,1,1,1,0},
+			{1,1,0,0,0,1,1,0},
+		};
+		break;
+	case 'L':
+		output = {
+			{1,1,0,0,0,0,0,0},
+			{1,1,0,0,0,0,0,0},
+			{1,1,0,0,0,0,0,0},
+			{1,1,0,0,0,0,0,0},
+			{1,1,0,0,0,0,0,0},
+			{1,1,0,0,0,0,0,0},
+			{1,1,1,1,1,1,0,0},
+			{1,1,1,1,1,1,0,0},
+		};
+		break;
+	case 'M':
+		output = {
+			{1,1,1,0,0,1,1,1},
+			{1,1,1,1,1,1,1,1},
+			{1,1,1,1,1,1,1,1},
+			{1,1,0,1,1,0,1,1},
+			{1,1,0,0,0,0,1,1},
+			{1,1,0,0,0,0,1,1},
+			{1,1,0,0,0,0,1,1},
+			{1,1,0,0,0,0,1,1},
+		};
+		break;
+	case 'N':
+		output = {
+			{1,1,1,0,0,0,1,1},
+			{1,1,1,1,0,0,1,1},
+			{1,1,0,1,1,0,1,1},
+			{1,1,0,0,1,1,1,1},
+			{1,1,0,0,0,0,1,1},
+			{1,1,0,0,0,0,1,1},
+			{1,1,0,0,0,0,1,1},
+			{1,1,0,0,0,0,1,1},
+		};
+		break;
+	case 'O':
+		output = {
+			{0,1,1,1,1,1,1,0},
+			{1,1,1,1,1,1,1,1},
+			{1,1,0,0,0,0,1,1},
+			{1,1,0,0,0,0,1,1},
+			{1,1,0,0,0,0,1,1},
+			{1,1,0,0,0,0,1,1},
+			{1,1,1,1,1,1,1,1},
+			{0,0,1,1,1,1,1,0},
+		};
+		break;
+	case 'P':
+		output = {
+			{1,1,1,1,1,1,0,0},
+			{1,1,1,1,1,1,1,0},
+			{1,1,0,0,0,0,1,1},
+			{1,1,1,1,1,1,1,1},
+			{1,1,1,1,1,1,1,0},
+			{1,1,0,0,0,0,0,0},
+			{1,1,0,0,0,0,0,0},
+			{1,1,0,0,0,0,0,0},
+		};
+		break;
+	case 'Q':
+		output = {
+			{0,1,1,1,1,1,1,0},
+			{1,1,1,1,1,1,1,1},
+			{1,1,0,0,0,0,1,1},
+			{1,1,0,0,0,0,1,1},
+			{1,1,0,0,1,1,1,1},
+			{1,1,0,0,1,1,1,1},
+			{1,1,1,1,1,1,1,1},
+			{0,1,1,1,1,1,1,0},
+		};
+		break;
+	case 'R':
+		output = {
+			{1,1,1,1,1,1,0,0},
+			{1,1,1,1,1,1,1,0},
+			{1,1,0,0,0,1,1,0},
+			{1,1,0,0,0,1,1,0},
+			{1,1,1,1,1,1,0,0},
+			{1,1,0,0,0,1,1,0},
+			{1,1,0,0,0,1,1,0},
+			{1,1,0,0,0,1,1,0},
+		};
+		break;
+	case 'S':
+		output = {
+			{0,0,1,1,1,0,0,0},
+			{0,1,1,1,1,1,0,0},
+			{1,1,0,0,0,0,0,0},
+			{0,1,1,1,1,1,0,0},
+			{0,1,1,1,1,1,0,0},
+			{0,0,0,0,0,1,1,0},
+			{0,1,1,1,1,1,0,0},
+			{0,0,1,1,1,1,0,0},
+		};
+		break;
+	case 'T':
+		output = {
+			{1,1,1,1,1,1,1,1},
+			{1,1,1,1,1,1,1,1},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,1,1,0,0,0},
+		};
+		break;
+	case 'U':
+		output = {
+			{1,1,0,0,0,0,1,1},
+			{1,1,0,0,0,0,1,1},
+			{1,1,0,0,0,0,1,1},
+			{1,1,0,0,0,0,1,1},
+			{1,1,0,0,0,0,1,1},
+			{1,1,0,0,0,0,1,1},
+			{1,1,1,1,1,1,1,1},
+			{0,1,1,1,1,1,1,0},
+		};
+		break;
+	case 'V':
+		output = {
+			{1,1,0,0,0,0,0,0},
+			{1,1,0,0,0,0,1,1},
+			{1,1,0,0,0,0,1,1},
+			{1,1,0,0,0,0,1,1},
+			{1,1,0,0,0,1,1,0},
+			{1,1,0,0,1,1,0,0},
+			{1,1,0,1,1,0,0,0},
+			{1,1,1,1,0,0,0,0},
+		};
+		break;
+	case 'W':
+		output = {
+			{1,1,0,0,0,0,1,1},
+			{1,1,0,0,0,0,1,1},
+			{1,1,0,0,0,0,1,1},
+			{1,1,0,0,0,0,1,1},
+			{1,1,0,1,1,0,1,1},
+			{1,1,0,1,1,0,1,1},
+			{1,1,1,1,1,1,1,1},
+			{1,1,1,0,0,1,1,1}
+		};
+		break;
+	case 'X':
+		output = {
+			{1,1,0,0,0,0,1,1},
+			{1,1,0,0,0,0,1,1},
+			{0,1,1,0,0,1,1,0},
+			{0,1,1,1,1,1,1,0},
+			{0,1,1,1,1,1,1,0},
+			{1,1,1,0,0,1,1,1},
+			{1,1,0,0,0,0,1,1},
+			{1,1,0,0,0,0,1,1},
+		};
+		break;
+	case 'Y':
+		output = {
+			{1,1,0,0,0,0,1,1},
+			{0,1,1,0,0,1,1,0},
+			{0,0,1,1,1,1,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,1,1,0,0,0}
+		};
+		break;
+	case 'Z':
+		output = {
+			{1,1,1,1,1,1,1,1},
+			{1,1,1,1,1,1,1,1},
+			{0,0,0,0,0,1,1,1},
+			{0,0,0,0,1,1,1,0},
+			{0,0,0,1,1,1,0,0},
+			{1,1,1,1,1,1,1,1},
+			{1,1,1,1,1,1,1,1},
+			{0,0,1,1,1,1,0,0}
+		};
+		break;
+	case 'a':
+		output = {
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,1,1,1,0,0,0},
+			{0,1,0,0,0,1,1,0},
+			{0,1,0,0,0,1,1,0},
+			{0,0,1,1,1,1,1,1},
+		};
+		break;
+	case 'b':
+		output = {
+			{1,0,0,0,0,0,0,0},
+			{1,0,0,0,0,0,0,0},
+			{1,1,0,0,0,0,0,0},
+			{1,0,0,0,0,0,0,0},
+			{1,0,1,1,0,0,0,0},
+			{1,1,0,0,1,0,0,0},
+			{1,1,0,0,1,0,0,0},
+			{1,0,1,1,0,0,0,0},
+		};
+		break;
+	case 'c':
+		output = {
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0,},
+			{0,0,0,0,0,0,0,0},
+			{0,1,1,1,0,0,0,0},
+			{1,0,0,0,0,0,0,0},
+			{1,0,0,0,0,0,0,0},
+			{1,0,0,0,0,0,0,0},
+			{0,1,1,1,0,0,0,0},
+		};
+		break;
+	case 'd':
+		output = {
+			{0,0,0,1,0,0,0,0},
+			{0,0,0,1,0,0,0,0},
+			{0,0,0,1,0,0,0,0},
+			{0,0,0,1,0,0,0,0},
+			{0,1,1,1,0,0,0,0},
+			{1,0,0,1,0,0,0,0},
+			{1,0,0,1,0,0,0,0},
+			{0,1,1,0,1,0,0,0},
+		};
+		break;
+	case 'e':
+		output = {
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,1,1,1,0,0,0},
+			{0,1,0,0,0,1,0,0},
+			{0,1,1,1,1,0,0,0},
+			{0,1,0,0,0,0,0,0},
+			{0,0,1,1,1,1,0,0},
+		};
+		break;
+	case 'f':
+		output = {
+			{0,0,0,0,0,1,1,0},
+			{0,0,0,0,1,0,0,0},
+			{0,0,0,1,0,0,0,0},
+			{0,0,1,1,1,1,0,0},
+			{0,0,0,1,0,0,0,0},
+			{0,0,0,1,0,0,0,0},
+			{0,0,0,1,0,0,0,0},
+			{0,0,0,1,0,0,0,0},
+		};
+		break;
+	case 'g':
+		output = {
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,1,1,0,1,0},
+			{0,0,1,0,0,1,0,0},
+			{0,0,1,0,0,1,0,0},
+			{0,0,0,1,1,1,0,0},
+			{0,0,0,0,0,1,0,0},
+			{0,0,1,0,0,1,0,0},
+			{0,0,0,1,1,0,0,0},
+		};
+		break;
+	case 'h':
+		output = {
+			{0,0,1,0,0,0,0,0},
+			{0,0,1,0,0,0,0,0},
+			{0,0,1,0,0,0,0,0},
+			{0,0,1,0,0,0,0,0},
+			{0,0,1,1,1,0,0,0},
+			{0,0,1,0,0,1,0,0},
+			{0,0,1,0,0,1,0,0},
+			{0,0,1,0,0,1,0,0},
+		};
+		break;
+	case 'i':
+		output = {
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,0,1,0,0,0},
+			{0,0,0,0,1,0,0,0},
+			{0,0,0,1,1,0,0,0},
+		};
+		break;
+	case 'j':
+		output = {
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,0,1,0,0,0},
+			{0,0,0,0,1,0,0,0},
+			{0,1,0,0,1,0,0,0},
+			{0,0,1,1,0,0,0,0},
+		};
+		break;
+	case 'k':
+		output = {
+			{0,0,1,0,0,0,0,0},
+			{0,0,1,0,0,0,0,0},
+			{0,0,1,0,0,0,0,0},
+			{0,0,1,0,1,0,0,0},
+			{0,0,1,1,0,1,0,0},
+			{0,0,1,1,1,1,0,0},
+			{0,0,1,1,0,0,0,0},
+			{0,0,1,0,1,0,0,0},
+		};
+		break;
+	case 'l':
+		output = {
+			{0,0,0,1,0,0,0,0},
+			{0,0,0,1,0,0,0,0},
+			{0,0,0,1,0,0,0,0},
+			{0,0,0,1,0,0,0,0},
+			{0,0,0,1,0,0,0,0},
+			{0,0,0,1,0,0,0,0},
+			{0,0,0,1,0,0,0,0},
+			{0,0,0,0,1,0,0,0},
+		};
+		break;
+	case 'm':
+		output = {
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{1,0,0,0,0,0,0,0},
+			{0,1,1,1,0,1,1,0},
+			{0,1,0,0,1,0,0,1},
+			{0,1,0,0,1,0,0,1},
+			{0,1,0,0,1,0,0,1},
+		};
+		break;
+	case 'n':
+		output = {
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,1,1,1,0,0,0},
+			{0,0,1,0,0,1,0,0},
+			{0,0,1,0,0,1,0,0},
+			{0,0,1,0,0,1,0,0}
+		};
+		break;
+	case 'o':
+		output = {
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,1,0,0,1,0,0},
+			{0,0,1,0,0,1,0,0},
+			{0,0,0,1,1,0,0,0}
+		};
+		break;
+	case 'p':
+		output = {
+			{0,0,1,0,1,1,0,0},
+			{0,0,1,1,0,0,1,0},
+			{0,0,1,1,0,0,1,0},
+			{0,0,1,0,1,1,0,0},
+			{0,0,1,0,0,0,0,0},
+			{0,0,1,0,0,0,0,0},
+			{0,0,1,0,0,0,0,0},
+			{0,0,1,0,0,0,0,0},
+		};
+		break;
+	case 'q':
+		output = {
+			{0,0,0,1,1,0,1,0},
+			{0,0,1,0,0,1,1,0},
+			{0,0,1,0,0,1,1,0},
+			{0,0,0,1,1,0,1,0},
+			{0,0,0,0,0,0,1,0},
+			{0,0,0,0,0,0,1,0},
+			{0,0,0,0,0,0,1,0},
+			{0,0,0,0,0,0,0,1},
+		};
+		break;
+
+	case 'r':
+		output = {
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0,},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,1,0,1,1,0,0},
+			{0,0,1,1,0,0,0,0},
+			{0,0,1,0,0,0,0,0},
+			{0,0,1,0,0,0,0,0},
+		};
+		break;
+	case 's':
+		output = {
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,1,0,0,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,0,0,1,0,0},
+			{0,0,0,1,1,0,0,0},
+		};
+		break;
+	case 't':
+		output = {
+			{0,0,0,1,0,0,0,0},
+			{0,0,0,1,0,0,0,0},
+			{0,0,0,1,0,0,0,0},
+			{0,0,0,1,0,0,0,0},
+			{0,1,1,1,1,1,0,0},
+			{0,0,0,1,0,0,0,0},
+			{0,0,0,1,0,0,0,0},
+			{0,0,0,0,1,1,1,0},
+		};
+		break;
+	case 'u':
+		output = {
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,1,0,1,0,0,0},
+			{0,0,1,0,1,0,0,0},
+			{0,0,1,0,1,0,0,0},
+			{0,0,0,1,0,1,0,0},
+		};
+		break;
+	case 'v':
+		output = {
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,1,0,0,1,0},
+			{0,0,0,1,0,0,1,0},
+			{0,0,0,1,0,1,0,0},
+			{0,0,0,1,1,0,0,0},
+		};
+		break;
+	case 'w':
+		output = {
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,1,0,0,0,1,0},
+			{0,0,1,0,1,0,1,0},
+			{0,0,1,1,0,1,1,0},
+			{0,0,1,0,0,0,1,0},
+		};
+		break;
+	case 'x':
+		output = {
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,1,1,0,0,1,1,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,1,1,0,0,1,1,0},
+			{0,0,1,0,0,1,0,0},
+		};
+		break;
+	case 'y':
+		output = {
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,1,0,0,0,1},
+			{0,0,0,0,1,0,1,0},
+			{0,0,0,0,0,1,0,0},
+			{0,0,0,0,0,1,0,0},
+			{0,0,0,0,1,0,0,0},
+			{0,0,0,1,0,0,0,0},
+		};
+		break;
+	case 'z':
+		output = {
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,1,1,1,1,0,0},
+			{0,0,0,1,0,0,0,0},
+			{0,0,1,0,0,0,0,0},
+			{0,0,1,1,1,1,0,0},
+		};
+		break;
+	case '.':
+		output = {
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,1,1,0,0,0},
+		};
+		break;
+	case '?':
+		output = {
+			{0,0,0,1,1,1,0,0},
+			{0,0,1,0,0,0,1,0},
+			{0,0,0,0,0,0,1,0},
+			{0,0,0,0,0,1,0,0},
+			{0,0,0,0,1,0,0,0},
+			{0,0,0,0,1,0,0,0},
+			{0,0,0,1,0,0,0,0},
+			{0,0,0,1,1,0,0,0},
+		};
+		break;
+	case '!':
+		output = {
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,1,1,0,0,0}
+		};
+	case '\'':
+		output = {
+			{1,1,0,0,0,0,0,0},
+			{0,1,1,0,0,0,0,0},
+			{0,0,1,1,0,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,0,1,1,0,0},
+			{0,0,0,0,0,1,1,0},
+			{0,0,0,0,0,0,1,1},
+			{0,0,0,0,0,0,0,1}
+		};
+	case '/':
+		output = {
+			{0,0,0,0,0,0,1,1},
+			{0,0,0,0,0,1,1,0},
+			{0,0,0,0,1,1,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,1,1,0,0,0,0},
+			{0,1,1,0,0,0,0,0},
+			{1,1,0,0,0,0,0,0},
+			{1,0,0,0,0,0,0,0}
+		};
+		break;
+	case '-':
+		output = {
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,1,1,1,1,1,1,0},
+			{0,1,1,1,1,1,1,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0}
+		};
+		break;
+	case '_':
+		output = {
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{1,1,1,1,1,1,1,1},
+			{1,1,1,1,1,1,1,1}
+		};
+		break;
+	case ';':
+		output = {
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,0,1,0,0,0},
+		};
+	case ':':
+		output = {
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,1,1,0,0,0},
+		};
+	case '~':
+		output = {
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,1,0,1,0,0},
+			{0,0,1,0,1,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+		};
+	case '&':
+		output = {
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,1,0,0,1,0,0},
+			{0,0,0,1,0,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,1,0,0,1,1,0},
+			{0,0,0,1,1,0,1,0},
+			{0,0,0,0,0,0,0,0},
+		};
+	case '$':
+		output = {
+			{0,0,0,1,0,0,0,0},
+			{0,0,1,1,1,0,0,0},
+			{0,1,0,1,0,1,0,0},
+			{0,1,0,1,0,0,0,0},
+			{0,0,1,1,1,0,0,0},
+			{0,0,0,1,0,1,0,0},
+			{0,0,1,1,1,0,0,0},
+			{0,0,0,1,0,0,0,0},
+		};
+	default:
+	case '(':
+		output = {
+			{0,0,0,1,0,0,0,0},
+			{0,0,1,0,0,0,0,0},
+			{0,1,0,0,0,0,0,0},
+			{0,1,0,0,0,0,0,0},
+			{0,1,0,0,0,0,0,0},
+			{0,1,0,0,0,0,0,0},
+			{0,0,1,0,0,0,0,0},
+			{0,0,0,1,0,0,0,0},
+		};
+	case ')':
+		output = {
+			{0,0,0,0,1,0,0,0},
+			{0,0,0,0,0,1,0,0},
+			{0,0,0,0,0,0,1,0},
+			{0,0,0,0,0,0,1,0},
+			{0,0,0,0,0,0,1,0},
+			{0,0,0,0,0,0,1,0},
+			{0,0,0,0,0,1,0,0},
+			{0,0,0,0,1,0,0,0},
+		};
+	case ',':
+		output = {
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,0,1,0,0,0},
+		};
+	case '"':
+		output = {
+			{0,0,1,0,0,1,0,0},
+			{0,0,1,0,0,1,0,0},
+			{0,0,1,0,0,1,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+		};
+	case '%':
+		output = {
+			{0,0,0,0,0,0,0,1},
+			{0,1,1,0,0,0,1,0},
+			{0,1,1,0,0,1,0,0},
+			{0,0,0,0,1,0,0,0},
+			{0,0,0,1,0,0,0,0},
+			{0,0,1,0,0,1,1,0},
+			{0,1,0,0,0,1,1,0},
+			{1,0,0,0,0,0,0,0},
+		};
+	case '+':
+		output = {
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,1,1,1,1,1,1,0},
+			{0,1,1,1,1,1,1,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,1,1,0,0,0},
+			{0,0,0,0,1,0,0,0},
+		};
+	case '=':
+		output = {
+			{0,0,0,0,0,0,0,0},
+			{1,1,1,1,1,1,1,1},
+			{1,1,1,1,1,1,1,1},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{1,1,1,1,1,1,1,1},
+			{1,1,1,1,1,1,1,1},
+		};
+	case '*':
+		output = {
+			{0,0,0,0,1,0,0,0},
+			{0,0,0,1,1,1,0,0},
+			{0,0,0,0,1,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0},
+		};
+		// Return a completely blank tile (all 0s) for undefined characters
+		output = {
+			{0,0,0,0,0,0,0,0}, 
+			{0,0,0,0,0,0,0,0}, 
+			{0,0,0,0,0,0,0,0}, 
+			{0,0,0,0,0,0,0,0},
+			{0,0,0,0,0,0,0,0}, 
+			{0,0,0,0,0,0,0,0}, 
+			{0,0,0,0,0,0,0,0}, 
+			{0,0,0,0,0,0,0,0}
+		};
+		break;
+
+
+	}
+	return output;
+}
+/*
+some advice when using buildSpriteTile:
+In basic terms, Treat each instr you give it like a paint-by-numbers thing.
+use the colors map to translate between numbers and colors, give it a blank tile
+and the result will be a sprite tile, ready for use, fully colored.
+When building an instr, make sure you assign at least one int-Pixel Pair
+for transparency ( you can make a pixel transparent by setting the _isTransparent property of a Pixel Object to true)
+(examplePixel._isTransparent = true;) AND ASSIGN IT TO ID 0
+*/
+Tile& buildSpriteTile(Tile& blankTile, std::vector<std::vector<int>> instr, std::map<int, Pixel> colors)
+{
+	if (instr.size() == 8) // a tile is 8x8 pixels. 8*8 = 64.
+	{
+		for (int i = 0; i < instr.size(); i++)
+		{
+			for (int j = 0; j < instr[i].size(); j++)
+			{
+				if (colors.count(instr[i][j]) != 0)
+				{
+					blankTile.setPixel(Pos(j, i), colors.at(instr[i][j]));
+				}
+
+			}
+		}
+	}
+	return blankTile;
+}
+
+/*
+QUICK-REFERENCE GUIDE:
+Pos(int X,int Y) - A 2D, integer coordinate system
+unit conversions:
+-Static tilesToPixels() and pixelsToTiles()
+-Operator- returns a struct called distances with int XDiff, int Ydiff and Euclidean distance.
+-m_x and m_y: coordinate components
+---------------------------------
+Pixel(int R, int G, int B,Pos)
+Inherits from Pos, has full 8-bit per channel color
+-Change color - setNewRGB(R,G,B);
+-compute transparency - trueAlpha(Pixel other, float alpha) Note: alpha should satisfy (alpha >=0.0 && alpha <= 1.0)
+returns a struct called color, with properties int Red, int Green, int Blue, float transparency
+-getRed(),getGreen(),getBlue() return each channel.
+----------------------------------
+Tile(Pos GPos, bool isSprite, bool collidable = false)
+an 8x8 collection of Pixel objects.
+-void setPixel(Pos, Pixel) and Pixel getPixel(Pos) -> manipulates a tile's pixels
+-Pos getGlobalPos(), bool getIsSprite(), std::vector<std::vector<Pixel>> getTileData() ->useful getters
+-setNewGlobalPos() -> Don't use this if getIsSprite() returns true (it won't do anything). Sets the Tile's global position.
+
+Please, read the documentation in the Tile class.
+I advise against messing around with tiles before reading the tile class definition fully.
+sincerely, the guy who made this code.
+-----------------------------------
+Sprite()
+addTile(Tile, int),editTile(int X ,int Y,Pos,Pixel),getTile(int X, int Y),replaceTile(int X,int Y,tile) -> useful tile editing functions
+-updateGlobalPos(Pos); Move A Sprite
+-getGlobalPos(); Where is a sprite
+---------------------------------
+Screen
+WARNING! There should be exactly ONE (1) instance of Screen! A Screen is memory intensive, taking up no less than 1.15MB per instance.
+(at draw time that minimum can go up to 4.7MB).
+-setTile(Pos,Tile) getTile(Pos)
+when it's time to draw the first frame, call the following IN ORDER!
+1) setNewScrollOffset(Pos) (OPTIONAL, but call before the end of game logic)
+2) compositeSprite(Sprite) (Call for every Sprite, IndexedSprite and Entity in the loaded area!)
+3) drawScreen(); <- LEGACY METHOD! DO NOT CALL!
+4) resetCompositing();
+On other frames,
+1) applyDiff()
+2) compositeSprite()
+3) resetCompositing
+--------------------------------
+IndexedSprite() inherits from Sprite
+-getCurrentFrame()
+-setCurrentFrame(vector<Pos>)
+-setupFrame() <- this is what you should call once per frame of animation.
+---------------------------------
+Entity(int HP) inherits from IndexedSprite.
+-setHP(int HP);
+-getHP();
+-setCollision(bool); Entity instances are collidable by default!
+-bool checkCollision(Tile) slower, more thorough collision check
+-Pos calcPhysics(Pos gravVector, std::map<Pos,Tile>) attempts to move an entity in the direction, given. returns the new position if it succeeds
+returns the current position if it can't.
+-addAnimation(std::vector<std::vector<Pos>>)
+-editAnimation(int, std::vector<std::vector<Pos>>)
+-setCurrentAnimIndex(int)
+-advanceOneFrame() <- Call This
+-applyFrame() <- and this together
+-------------------------------
+UniversalColorPallette
+This is for faster drawing within the limitations of ncurses. There should only be one instance of UniversalColorPallette
+useLookup(int) - search for something
+getRegistry(bool) - the bool is to determine if it's in render mode
+
+-------------------------------
+Other Useful functions:
+-Tile buildSpriteTile(Tile&,std::vector<std::vector<int>>,std::map<int,Pixel>)
+-charLookup(char) // for rendering text in the screen!
+-drawText(Tile&,std::vector<std::vector<int>>,Pixel)
+for an idea of how this works, consult systemsCheck()
+TileRef is a source for every Tile the Screen class uses.
+This is hopefully enough to get you started! Should you need further information, refer to class definitions
+if (!has_colors()) {
+	printw("Ncurses: No color support.\n");
+	refresh();
+	getch();
+	endwin();
+	return 1;
+}
+if (!can_change_color()) {
+	printw("Ncurses: Cannot change colors. Falling back to predefined.\n");
+	// Use predefined colors like COLOR_RED instead of custom
+} else {
+	printw("Ncurses: Full color support available.\n");
+}
+refresh();
+getch();  // Pause to check output
+*/
+int main()
+{
+
+
+	Screen screen; // the one and only Screen instance that should exist!
+	const Pos defaultPos = Pos(0, 0);
+	/*  not in use, yet
+	Entity player = Entity(10);
+	const std::map<char,Pos> moves
+	  {
+		  {'w',Pos(0,1)},
+		  {'a',Pos(-1,0)},
+		  {'s',Pos(0,-1)},
+		  {'d',Pos(1,0)},
+		  {'W',Pos(0,3)},
+		  {'A',Pos(-3,0)},
+		  {'S',Pos(0,-3)},
+		  {'D',Pos(3,0)}
+	  };*/
+	Tile playerTile0 = Tile(Pos(0, 0), true, true);
+	clearFrame();
+
+	//setNewRGB(29,26,0);  
+	Pixel transparentPixel = Pixel(0, 0, 0, Pos(0, 0));
+	transparentPixel._isTransparent = true;
+	std::map<int, Pixel> universalPallette = {
+		{0,transparentPixel},
+		{1,Pixel(255,255,255,defaultPos)}, //white
+		{2,Pixel(255,255,0,defaultPos)}, //hard hat
+		{3,Pixel(222,148,65,defaultPos)},  //skin
+		{4,Pixel(180,0,0,defaultPos)}, //uniform RED 22,0,0 BLU: 17,17,30
+		{5,Pixel(65,65,65,defaultPos)},
+		{6,Pixel(120,40,0,defaultPos)},
+		{7,Pixel(80,40,0,defaultPos)}
+	};
+	UniversalColorPallette UCP = UniversalColorPallette(universalPallette); // the One and ONLY UniversalColorPallette that should exist!
+	std::vector<std::vector<int>> playerPalletteReference0 = {
+		{0,0,0,0,0,0,0,0},
+		{0,0,0,0,0,0,0,0},
+		{0,0,0,0,0,1,2,2},
+		{0,0,0,0,2,2,2,2},
+		{0,0,0,3,5,5,5,5},
+		{0,0,0,0,3,3,3,3},
+		{0,0,0,6,4,3,3,3},
+		{0,0,4,4,6,3,3,3}
+	};
+	playerTile0 = buildSpriteTile(playerTile0, playerPalletteReference0, universalPallette);
+	Tile playerTile1 = Tile(Pos(1, 0), true, true);
+	std::vector<std::vector<int>> playerPalletteReference1 = {
+		{0,0,0,0,0,0,0,0},
+		{0,0,0,0,0,0,0,0},
+		{2,0,0,0,0,0,0,0},
+		{2,2,0,0,0,0,0,0},
+		{5,0,0,0,0,0,0,0},
+		{3,0,0,0,0,0,0,0},
+		{4,6,0,0,0,0,0,0},
+		{6,4,4,0,0,0,0,0}
+	};
+	playerTile1 = buildSpriteTile(playerTile1, playerPalletteReference1, universalPallette);
+	Tile playerTile2 = Tile(Pos(0, 1), true, true);
+	std::vector<std::vector<int>> playerPalletteReference2 =
+	{
+	 {0,0,3,4,6,6,6,6},
+	 {0,0,4,4,6,6,6,6},
+	 {0,0,2,2,6,6,6,6},
+	 {0,0,2,1,6,6,6,6},
+	 {0,0,0,2,7,7,7,7},
+	 {0,0,0,6,6,0,0,6},
+	 {0,0,0,6,0,0,0,0},
+	 {0,0,7,7,0,0,0,0}
+	};
+	playerTile2 = buildSpriteTile(playerTile2, playerPalletteReference2, universalPallette);
+	Tile playerTile3 = Tile(Pos(1, 1), true, true);
+	std::vector<std::vector<int>> playerPalletteReference3 =
+	{
+	  {6,4,3,0,0,0,0,0},
+	  {6,4,4,0,0,0,0,0},
+	  {6,3,3,0,0,0,0,0},
+	  {6,3,3,0,0,0,0,0},
+	  {7,3,0,0,0,0,0,0},
+	  {6,0,0,0,0,0,0,0},
+	  {6,0,0,0,0,0,0,0},
+	  {7,7,0,0,0,0,0,0}
+	};
+	playerTile3 = buildSpriteTile(playerTile3, playerPalletteReference3, universalPallette);
+	Sprite playerPrototype;
+	playerPrototype.addTile(playerTile0, 0);
+	playerPrototype.addTile(playerTile1, 0);
+	playerPrototype.addTile(playerTile2, 1);
+	playerPrototype.addTile(playerTile3, 1);
+	
+	//for(int i = 0; i < 4; i++)
+	//{
+	//111x15
+	playerPrototype.updateGlobalPos(Pos(32, 7));
+	screen.compositeSprite(playerPrototype);
+	//auto start = std::chrono::steady_clock::now();
+	//auto end = std::chrono::steady_clock::now();
+	//std::chrono::duration<double,std::milli> time = end - start;
+	//std::cout << time<< std::endl;
+	screen.resetCompositing();
+
+	return 0;
+}
+//VERSION 3.2.7
+// Run program: Ctrl + F5 or Debug > Start Without Debugging menu
+// Debug program: F5 or Debug > Start Debugging menu
+
+// Tips for Getting Started: 
+//   1. Use the Solution Explorer window to add/manage files
+//   2. Use the Team Explorer window to connect to source control
+//   3. Use the Output window to see build output and other messages
+//   4. Use the Error List window to view errors
+//   5. Go to Project > Add New Item to create new code files, or Project > Add Existing Item to add existing code files to the project
+//   6. In the future, to open this project again, go to File > Open > Project and select the .sln file
